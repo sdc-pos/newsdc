@@ -1381,15 +1381,11 @@ Dim Print_cnt       As Integer      '2018.04.09
             Call UniCode_Conv(K0_STOCK.JGYOBU, StrConv(ITEMREC.JGYOBU, vbUnicode))
             Call UniCode_Conv(K0_STOCK.NAIGAI, StrConv(ITEMREC.NAIGAI, vbUnicode))
             Call UniCode_Conv(K0_STOCK.HIN_GAI, StrConv(ITEMREC.HIN_GAI, vbUnicode))
-        
                 
             Do
-    '            sts = BTRV(BtOpGetEqual + BtSNoWait, STOCK_POS, STOCKREC, Len(STOCKREC), K0_STOCK, Len(K1_STOCK), 0)
                 sts = BTRV(BtOpGetEqual, STOCK_POS, STOCKREC, Len(STOCKREC), K0_STOCK, Len(K1_STOCK), 0)
                 Select Case sts
                     Case BtNoErr
-                
-                
                         Do
                             sts = BTRV(BtOpDelete, STOCK_POS, STOCKREC, Len(STOCKREC), K0_STOCK, Len(K0_STOCK), 0)
                             Select Case sts
@@ -1406,19 +1402,15 @@ Dim Print_cnt       As Integer      '2018.04.09
                                     Exit Function
                             End Select
                         Loop
-                
-                
                         Exit Do
                     Case BtErrKeyNotFound
                         Exit Do
-                    
                     Case BtErrRECORD_INUSE, BtErrFILE_INUSE
                         Beep
                         ans = MsgBox("他端末でデータ使用中です。<STOCKTAKING.DAT>", vbRetryCancel + vbQuestion, "確認入力")
                         If ans = vbCancel Then
                             Exit Function
                         End If
-                    
                     Case Else
                         Call File_Error(sts, BtOpGetEqual + BtSNoWait, "棚卸しデータ")
                         Exit Function
@@ -1719,8 +1711,8 @@ Dim i       As Integer
             DoEvents
             Do
                 Dim iniSUMZREC As SUMZREC_Tag '2020/04/22
-                SUMZREC = iniSUMZREC
-            
+                SUMZREC = iniSUMZREC '2020/04/22
+
                 sts = BTRV(com, STOCK_POS, STOCKREC, Len(STOCKREC), K1_STOCK, Len(K1_STOCK), 1)
                 Select Case sts
                     Case BtNoErr
@@ -2272,7 +2264,10 @@ Dim X_Tab       As Integer
             Printer.Print ""; '2020/04/20 セミコロンを付けると下のprinter.printと同じ行になる
             Edit = "(" & Right(Space(11) & Format(CLng(StrConv(SUMZREC.SYK_E_QTY, vbUnicode)), "#"), 11) & ")"
             Printer.Print Edit
-                                    
+            
+
+            
+            
             Printer.Print String(130, "─")
             Lcnt = Lcnt + 2
             

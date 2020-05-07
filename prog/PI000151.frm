@@ -985,7 +985,6 @@ Begin VB.Form PI000151
       _ExtentX        =   10821
       _ExtentY        =   1931
       _Version        =   393217
-      Enabled         =   -1  'True
       TextRTF         =   $"PI000151.frx":0000
    End
    Begin VB.ComboBox Combo1 
@@ -2359,7 +2358,9 @@ Private Const cmdCen% = 10                  'éÊÇËè¡Çµ
 
 
 'Private Const LAST_UPDATE_DAY$ = "([PI00015] 2017.10.17 09:30)"
-Private Const LAST_UPDATE_DAY$ = "([PI00015] 2017.12.15 10:15)"
+'Private Const LAST_UPDATE_DAY$ = "([PI00015] 2017.12.15 10:15)"
+Private Const LAST_UPDATE_DAY$ = "([PI00015] 2020.05.07 12:30) çÏã∆é¿ê—çÄñ⁄ñºïœçX"
+
 
 Private Sub Input_Lock()
 '----------------------------------------------------------------------------

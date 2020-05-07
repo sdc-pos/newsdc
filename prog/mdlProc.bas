@@ -53752,3 +53752,504 @@ Abort_Tran:
     End If
 
 End Function
+
+Public Function kintais_Proc(Sendbuf As String, Ti As Integer, Tj As Integer) As Integer
+'-------------------------------------------------------
+'
+'   『勤怠出社』2020/05/07
+'
+'-------------------------------------------------------
+Dim sts             As Integer
+Dim SUMI_QTY        As Long
+Dim MI_QTY          As Long
+Dim QTY             As Long
+Dim i               As Integer
+Dim Tanaban         As String * 8
+Dim Hinban          As String * 20
+Dim RET_JGYOBU      As String * 1
+Dim RET_NAIGAI      As String * 1
+Dim MEMO            As String
+Dim MENU_NO         As String
+
+    kintais_Proc = True
+
+    Select Case ID_KANRI_TBL(ING_No).Step
+        Case Step_Sagyo1_RES        '１回目の受信（棚番／品番）
+            For i = 0 To M_Gyo - 1
+                Select Case Trim(WEL_Para_Tbl(Ti, Tj).Wel_Para(i).LCD)
+                    Case LCD_Tanaban        '棚番
+                        Tanaban = Right(ID_KANRI_TBL(ING_No).Recv_text(i), Len(ID_KANRI_TBL(ING_No).Recv_text(i)) - 1)
+                        If Trim(Tanaban) = Loc_OK_Para Then     '棚番OK
+                        Else
+                            '------------------ 倉庫マスタ読込み
+                            Call UniCode_Conv(K0_SOKO.SOKO_NO, Left(Tanaban, 2))
+                            sts = BTRV(BtOpGetEqual, SOKO_POS, SOKOREC, Len(SOKOREC), K0_SOKO, Len(K0_SOKO), 0)
+                            Select Case sts
+                                Case BtNoErr
+                                Case BtErrKeyNotFound
+                
+                                '   -------------------------------- エラーメッセージ作成
+                                    'Call Err_Send_Proc(ID_KANRI_TBL(ING_No).YOIN_DNAME, Left(Tanaban, 2), "倉庫エラー", "", "")        '2017.09.22
+                                    Call Err_Send_Proc(ID_KANRI_TBL(ING_No).YOIN_LONG_DNAME, Left(Tanaban, 2), "倉庫エラー", "", "")    '2017.09.22
+                                    Sendbuf = Text_Create_Proc()
+                                    ID_KANRI_TBL(ING_No).Step = ID_KANRI_TBL(ING_No).Step - 1
+                                    Hin_Shogo_Proc = False
+                                    Exit Function
+                                Case Else
+                                    Call Err_Send_Proc("システム異常発生", "", "", "", "")
+                                    Sendbuf = Text_Create_Proc()
+                                    Call File_Error(sts, BtOpGetEqual, "倉庫マスタ", 0)
+                                    Exit Function
+                            End Select
+                            
+                            '------------------ 棚マスタ読込み
+                            Call UniCode_Conv(K0_TANA.SOKO_NO, Left(Tanaban, 2))
+                            Call UniCode_Conv(K0_TANA.Retu, Mid(Tanaban, 3, 2))
+                            Call UniCode_Conv(K0_TANA.Ren, Mid(Tanaban, 5, 2))
+                            Call UniCode_Conv(K0_TANA.Dan, Right(Tanaban, 2))
+                            sts = BTRV(BtOpGetEqual, TANA_POS, TANAREC, Len(TANAREC), K0_TANA, Len(K0_TANA), 0)
+                            Select Case sts
+                                Case BtNoErr
+                                Case BtErrKeyNotFound
+                
+                                '   -------------------------------- エラーメッセージ作成
+                                    '有効桁数により棚番の編集を変える   '2017.09.23
+                                    If Len(Trim(Tanaban)) < 8 Then
+                                        
+                                        Call Err_Send_Proc(ID_KANRI_TBL(ING_No).YOIN_LONG_DNAME, Tanaban, "棚番エラー", "", "")    '2017.09.22
+                                    Else
+                                        Call Err_Send_Proc(ID_KANRI_TBL(ING_No).YOIN_LONG_DNAME, Left(Tanaban, 2) & "-" & Mid(Tanaban, 3, 2) & "-" & Mid(Tanaban, 5, 2) & "-" & Right(Tanaban, 2), "棚番エラー", "", "")    '2017.09.22
+                                    End If
+                                    '有効桁数により棚番の編集を変える   '2017.09.23
+                                    
+                                    Sendbuf = Text_Create_Proc()
+                                    ID_KANRI_TBL(ING_No).Step = ID_KANRI_TBL(ING_No).Step - 1
+                
+                                    Hin_Shogo_Proc = False
+                                    Exit Function
+                                Case Else
+                                    Call Err_Send_Proc("システム異常発生", "", "", "", "")
+                                    Sendbuf = Text_Create_Proc()
+                                    Call File_Error(sts, BtOpGetEqual, "棚マスタ", 0)
+                                    Exit Function
+                            End Select
+           
+                        End If
+                    Case LCD_Hinban         '品番
+                        Hinban = ID_KANRI_TBL(ING_No).Recv_text(i)
+                
+                        '------------------ 品目マスタ読込み
+                        sts = Item_Read_Proc(ID_KANRI_TBL(ING_No).JGYOBU, ID_KANRI_TBL(ING_No).NAIGAI, Hinban, RET_JGYOBU, RET_NAIGAI)
+                        Select Case sts
+                            Case BtNoErr
+                                If Trim(Tanaban) = Loc_OK_Para Then
+                                    '棚番OK時の棚番チェック
+                                    Call UniCode_Conv(K0_TANA.SOKO_NO, StrConv(ITEMREC.ST_SOKO, vbUnicode))
+                                    Call UniCode_Conv(K0_TANA.Retu, StrConv(ITEMREC.ST_RETU, vbUnicode))
+                                    Call UniCode_Conv(K0_TANA.Ren, StrConv(ITEMREC.ST_REN, vbUnicode))
+                                    Call UniCode_Conv(K0_TANA.Dan, StrConv(ITEMREC.ST_DAN, vbUnicode))
+                                    sts = BTRV(BtOpGetEqual, TANA_POS, TANAREC, Len(TANAREC), K0_TANA, Len(K0_TANA), 0)
+                                    Select Case sts
+                                        Case BtNoErr
+                                            Tanaban = StrConv(TANAREC.SOKO_NO, vbUnicode) & StrConv(TANAREC.Retu, vbUnicode) & StrConv(TANAREC.Ren, vbUnicode) & StrConv(TANAREC.Dan, vbUnicode)
+                                        Case BtErrKeyNotFound
+                                        '   -------------------------------- エラーメッセージ作成
+                                          
+                                            '有効桁数により棚番の編集を変える   '2017.09.23
+                                            If Len(Trim(Tanaban)) < 8 Then
+                                                Call Err_Send_Proc(ID_KANRI_TBL(ING_No).YOIN_LONG_DNAME, Tanaban, "棚番エラー", "", "")    '2017.09.22
+                                            Else
+                                                Call Err_Send_Proc(ID_KANRI_TBL(ING_No).YOIN_LONG_DNAME, Left(Tanaban, 2) & "-" & Mid(Tanaban, 3, 2) & "-" & Mid(Tanaban, 5, 2) & "-" & Right(Tanaban, 2), "棚番エラー", "", "")    '2017.09.22
+                                            End If
+                                            '有効桁数により棚番の編集を変える   '2017.09.23
+                    
+                                            Sendbuf = Text_Create_Proc()
+                                            ID_KANRI_TBL(ING_No).Step = ID_KANRI_TBL(ING_No).Step - 1
+                
+                                            Hin_Shogo_Proc = False
+                                            Exit Function
+                                        Case Else
+                                            Call Err_Send_Proc("システム異常発生", "", "", "", "")
+                                            Sendbuf = Text_Create_Proc()
+                                            Call File_Error(sts, BtOpGetEqual, "棚マスタ", 0)
+                                            Exit Function
+                                    End Select
+                                End If
+                            Case BtErrKeyNotFound
+                                '   -------------------------------- エラーメッセージ作成
+                                Call Err_Send_Proc(ID_KANRI_TBL(ING_No).YOIN_LONG_DNAME, Hinban, "品番エラー", "", "")  '2017.09.22
+                    
+                                Sendbuf = Text_Create_Proc()
+                                ID_KANRI_TBL(ING_No).Step = ID_KANRI_TBL(ING_No).Step - 1
+                
+                                Hin_Shogo_Proc = False
+                                Exit Function
+                            Case Else
+                                Call Err_Send_Proc("システム異常発生", "", "", "", "")
+                                Sendbuf = Text_Create_Proc()
+                                Call File_Error(sts, BtOpGetEqual, "品目マスタ", 0)
+                                Exit Function
+                        End Select
+        
+                End Select
+            Next i
+            '   -------------------------------- 在庫数集計
+            If Zaiko_Syukei_Proc(SUMI_QTY, _
+                                    MI_QTY, _
+                                    RET_JGYOBU, _
+                                    RET_NAIGAI, Hinban) Then
+                Call Err_Send_Proc("システム異常発生", "", "", "", "")
+                Sendbuf = Text_Create_Proc()
+                Exit Function
+            End If
+            '   -------------------------------- 送信テキスト作成
+            ID_KANRI_TBL(ING_No).Step = Step_Sagyo2_REQ
+            
+            ID_KANRI_TBL(ING_No).Tanaban = Tanaban          '棚番をセーブ
+            
+            
+            ID_KANRI_TBL(ING_No).S_JGYOBU = RET_JGYOBU      '資材対応の事業部2006.01.06
+            ID_KANRI_TBL(ING_No).S_NAIGAI = RET_NAIGAI      '資材対応の国内外2006.01.06
+            
+            
+            ID_KANRI_TBL(ING_No).Hinban = Hinban            '品番をセーブ
+            ID_KANRI_TBL(ING_No).Send_SUMI_QTY = SUMI_QTY   '送信する商品化済み数量
+            ID_KANRI_TBL(ING_No).Send_MI_QTY = MI_QTY       '送信する未商品数量
+                                                        
+            '数量付きの送信メッセージを作成する
+            Send_Text.sts = Sts_OK                                  'ステータス　OK
+            ID_KANRI_TBL(ING_No).Send_Text.sts = Sts_OK
+    
+            Send_Text.Display_Flg = Display_DEF                     '表示画面フラグ 通常入力画面
+            ID_KANRI_TBL(ING_No).Send_Text.Display_Flg = Display_DEF
+    
+            Send_Text.End_Menu = Menu_Only                          '最終メニューフラグ
+            ID_KANRI_TBL(ING_No).Send_Text.End_Menu = Menu_Only
+    
+            Send_Text.Menu_Suu = "05"                               'メニュー項目数（05固定）
+            ID_KANRI_TBL(ING_No).Send_Text.Menu_Suu = "05"
+    
+            Send_Text.FileName = ""                                 '送信データファイル名
+            ID_KANRI_TBL(ING_No).Send_Text.FileName = ""
+    
+            Send_Text.buzzer = Buzzer_DEF                           'ブザー音　標準
+            ID_KANRI_TBL(ING_No).Send_Text.buzzer = Buzzer_DEF
+                                                                        
+            '-----------------------------------------------１行目
+                                                            'BOX属性
+            Send_Text.Box_Type(0).Box_Type = TYPE_REF
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(0).Box_Type = TYPE_REF
+                                                            '表示内容
+            
+            Call UniCode_Conv(Send_Text.Box_Type(0).LCD, ID_KANRI_TBL(ING_No).YOIN_LONG_DNAME)
+            Call UniCode_Conv(ID_KANRI_TBL(ING_No).Send_Text.Box_Type(0).LCD, ID_KANRI_TBL(ING_No).YOIN_LONG_DNAME)
+                                                            
+                                                            '数値初期表示
+            Send_Text.Box_Type(0).INIT = ""
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(0).INIT = ""
+                                                            
+                                                            '初期カーソル位置
+            Send_Text.Box_Type(0).Start_Pos = ""
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(0).Start_Pos = ""
+                                                            '入力桁数
+            Send_Text.Box_Type(0).Max_Size = "00"
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(0).Max_Size = "00"
+                                                                                
+            Send_Text.Box_Type(0).MENU = ""                     'メニュ―番号
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(0).MENU = ""
+            '-----------------------------------------------２行目
+                                                            'BOX属性
+            Send_Text.Box_Type(1).Box_Type = TYPE_REF
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(1).Box_Type = TYPE_REF
+                                                            '表示内容
+                                                            
+            If Len(Trim(Tanaban)) < 8 Then
+                Call UniCode_Conv(Send_Text.Box_Type(1).LCD, Tanaban)
+    
+                Call UniCode_Conv(ID_KANRI_TBL(ING_No).Send_Text.Box_Type(1).LCD, Tanaban)
+            Else
+                Call UniCode_Conv(Send_Text.Box_Type(1).LCD, _
+                                Left(Tanaban, 2) & "-" & Mid(Tanaban, 3, 2) & "-" & Mid(Tanaban, 5, 2) & "-" & Right(Tanaban, 2))
+    
+                Call UniCode_Conv(ID_KANRI_TBL(ING_No).Send_Text.Box_Type(1).LCD, _
+                                Left(Tanaban, 2) & "-" & Mid(Tanaban, 3, 2) & "-" & Mid(Tanaban, 5, 2) & "-" & Right(Tanaban, 2))
+            End If
+            '有効桁数により棚番の編集を変える   '2017.09.23
+                                                            
+                                                            '数値初期表示
+            Send_Text.Box_Type(1).INIT = ""
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(1).INIT = ""
+                                                            
+                                                            '初期カーソル位置
+            Send_Text.Box_Type(1).Start_Pos = ""
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(1).Start_Pos = ""
+                                                            '入力桁数
+            Send_Text.Box_Type(1).Max_Size = "08"
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(1).Max_Size = "08"
+                                                                                
+            Send_Text.Box_Type(1).MENU = ""                     'メニュ―番号
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(1).MENU = ""
+            '-----------------------------------------------３行目
+                                                            'BOX属性
+            Send_Text.Box_Type(2).Box_Type = TYPE_REF
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(2).Box_Type = TYPE_REF
+                                                            '表示内容
+            Call UniCode_Conv(Send_Text.Box_Type(2).LCD, Hinban)
+            Call UniCode_Conv(ID_KANRI_TBL(ING_No).Send_Text.Box_Type(2).LCD, Hinban)
+                                                            '数値初期表示
+            Send_Text.Box_Type(2).INIT = ""
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(2).INIT = ""
+                                                            '初期カーソル位置
+            Send_Text.Box_Type(2).Start_Pos = ""
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(2).Start_Pos = ""
+                                                            '入力桁数
+            Send_Text.Box_Type(2).Max_Size = "13"
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(2).Max_Size = "13"
+                                                                                
+            Send_Text.Box_Type(2).MENU = ""                     'メニュ―番号
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(2).MENU = ""
+            '-----------------------------------------------４行目
+                                                            'BOX属性
+            Send_Text.Box_Type(3).Box_Type = TYPE_BCNUM
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(3).Box_Type = TYPE_BCNUM
+                                                            '表示内容
+            Call UniCode_Conv(Send_Text.Box_Type(3).LCD, LCD_SUMI_Suryo & Space(M_Keta - (Len(LCD_SUMI_Suryo) * 2) - 5 + (5 - Len(Format(SUMI_QTY, "#0")))) & Format(SUMI_QTY, "#0"))
+            Call UniCode_Conv(ID_KANRI_TBL(ING_No).Send_Text.Box_Type(3).LCD, LCD_SUMI_Suryo & Space(M_Keta - (Len(LCD_SUMI_Suryo) * 2) - 5 + (5 - Len(Format(SUMI_QTY, "#0")))) & Format(SUMI_QTY, "#0"))
+                                                            '数値初期表示
+            Send_Text.Box_Type(3).INIT = Space(10 - Len(Format(SUMI_QTY, "#0"))) & Format(SUMI_QTY, "#0")
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(3).INIT = Space(10 - Len(Format(SUMI_QTY, "#0"))) & Format(SUMI_QTY, "#0")
+                                                            '初期カーソル位置
+            Send_Text.Box_Type(3).Start_Pos = Format(M_Keta - 4, "00")      '数値は５桁固定
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(3).Start_Pos = Format(M_Keta - 4, "00")
+                                                            '入力桁数
+            Send_Text.Box_Type(3).Max_Size = "05"
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(3).Max_Size = "05"
+                                                                                
+            Send_Text.Box_Type(3).MENU = ""                     'メニュ―番号
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(3).MENU = ""
+            '-----------------------------------------------５行目
+                                                            'BOX属性
+            Send_Text.Box_Type(4).Box_Type = TYPE_BCNUM
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(4).Box_Type = TYPE_BCNUM
+                                                            '表示内容
+            Call UniCode_Conv(Send_Text.Box_Type(4).LCD, LCD_MI_Suryo & Space(M_Keta - (Len(LCD_MI_Suryo) * 2) - 5 + (5 - Len(Format(MI_QTY, "#0")))) & Format(MI_QTY, "#0"))
+            Call UniCode_Conv(ID_KANRI_TBL(ING_No).Send_Text.Box_Type(4).LCD, LCD_MI_Suryo & Space(M_Keta - (Len(LCD_MI_Suryo) * 2) - 5 + (5 - Len(Format(MI_QTY, "#0")))) & Format(MI_QTY, "#0"))
+                                                            '数値初期表示
+            Send_Text.Box_Type(4).INIT = Space(10 - Len(Format(MI_QTY, "#0"))) & Format(MI_QTY, "#0")
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(4).INIT = Space(10 - Len(Format(MI_QTY, "#0"))) & Format(MI_QTY, "#0")
+                                                            '初期カーソル位置
+            Send_Text.Box_Type(4).Start_Pos = Format(M_Keta - 4, "00")      '数値は５桁固定
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(4).Start_Pos = Format(M_Keta - 4, "00")
+                                                            '入力桁数
+            Send_Text.Box_Type(4).Max_Size = "05"
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(4).Max_Size = "05"
+                                                                                
+            Send_Text.Box_Type(4).MENU = ""                 'メニュ―番号
+            ID_KANRI_TBL(ING_No).Send_Text.Box_Type(4).MENU = ""
+        
+        
+            Sendbuf = Text_Create_Proc()
+        
+        
+        Case Step_Sagyo2_RES        '２回目の受信（商品／未商品数量）
+            For i = 0 To M_Gyo - 1
+            
+                
+                
+                Select Case Trim(Left(StrConv(ID_KANRI_TBL(ING_No).Send_Text.Box_Type(i).LCD, vbUnicode), Len(StrConv(ID_KANRI_TBL(ING_No).Send_Text.Box_Type(i).LCD, vbUnicode)) - CInt(ID_KANRI_TBL(ING_No).Send_Text.Box_Type(i).Max_Size)))
+            
+            
+                    Case LCD_Suryo          '数量（ここは無い）
+                        If Not IsNumeric(Trim(ID_KANRI_TBL(ING_No).Recv_text(i))) Then
+                            Call Err_Send_Proc(ID_KANRI_TBL(ING_No).YOIN_LONG_DNAME, Trim(ID_KANRI_TBL(ING_No).Recv_text(i)), "数量入力ミス", "", "")   '2017.09.22
+                            Sendbuf = Text_Create_Proc()
+                            ID_KANRI_TBL(ING_No).Step = ID_KANRI_TBL(ING_No).Step - 1
+                
+                            Hin_Shogo_Proc = False
+                            Exit Function
+                        End If
+                
+                        QTY = CLng(Trim(ID_KANRI_TBL(ING_No).Recv_text(i)))
+            
+            
+                    Case LCD_SUMI_Suryo, LCD_MI_Suryo    '数量（商品化済み数量／未商品数量）
+                
+                       If Not IsNumeric(Trim(ID_KANRI_TBL(ING_No).Recv_text(i))) Then
+                            Call Err_Send_Proc(ID_KANRI_TBL(ING_No).YOIN_LONG_DNAME, Trim(ID_KANRI_TBL(ING_No).Recv_text(i)), "数量入力ミス", "", "")   '2017.09.22
+                            Sendbuf = Text_Create_Proc()
+                            ID_KANRI_TBL(ING_No).Step = ID_KANRI_TBL(ING_No).Step - 1
+                
+                            Hin_Shogo_Proc = False
+                            Exit Function
+                        End If
+                
+                
+                        If Trim(Left(StrConv(ID_KANRI_TBL(ING_No).Send_Text.Box_Type(i).LCD, vbUnicode), Len(StrConv(ID_KANRI_TBL(ING_No).Send_Text.Box_Type(i).LCD, vbUnicode)) - CInt(ID_KANRI_TBL(ING_No).Send_Text.Box_Type(i).Max_Size))) = LCD_SUMI_Suryo Then
+                            SUMI_QTY = CLng(Trim(ID_KANRI_TBL(ING_No).Recv_text(i)))
+                            
+                        Else
+                            MI_QTY = CLng(Trim(ID_KANRI_TBL(ING_No).Recv_text(i)))
+                        
+                        End If
+        
+                End Select
+            Next i
+            '----------------------------------- データ更新処理開始 -----------
+                                                        'トランザクション開始
+            sts = BTRV(BtOpBeginConcurrentTransaction, ITEM_POS, ITEMREC, Len(ITEMREC), K0_ITEM, Len(K0_ITEM), 0)
+            If sts <> BtNoErr Then
+                Call Err_Send_Proc("システム異常発生", "", "", "", "")
+                Sendbuf = Text_Create_Proc()
+                Call File_Error(sts, BtOpBeginConcurrentTransaction, "", 0)
+                Exit Function
+            End If
+                                        '品目マスタ読込み
+            Call UniCode_Conv(K0_ITEM.JGYOBU, ID_KANRI_TBL(ING_No).S_JGYOBU)
+            Call UniCode_Conv(K0_ITEM.NAIGAI, ID_KANRI_TBL(ING_No).S_NAIGAI)
+            Call UniCode_Conv(K0_ITEM.HIN_GAI, ID_KANRI_TBL(ING_No).Hinban)
+            Do
+                sts = BTRV(BtOpGetEqual + BtSNoWait, ITEM_POS, ITEMREC, Len(ITEMREC), K0_ITEM, Len(K0_ITEM), 0)
+                Select Case sts
+                    Case BtNoErr
+                        Exit Do
+                    Case BtErrFILE_INUSE, BtErrRECORD_INUSE
+                    '   -------------------------------- エラーメッセージ作成
+                        Call Err_Send_Proc(ID_KANRI_TBL(ING_No).YOIN_LONG_DNAME, ID_KANRI_TBL(ING_No).Hinban, "他で使用中", "", "") '2017.09.22
+                    
+                        Sendbuf = Text_Create_Proc()
+                        ID_KANRI_TBL(ING_No).Step = ID_KANRI_TBL(ING_No).Step - 1
+                
+                        Hin_Shogo_Proc = False
+                        GoTo Abort_Tran
+                    Case BtErrKeyNotFound
+                    '   -------------------------------- エラーメッセージ作成
+                        Call Err_Send_Proc(ID_KANRI_TBL(ING_No).YOIN_LONG_DNAME, ID_KANRI_TBL(ING_No).Hinban, "品番未登録", "", "") '2017.09.22
+                    
+                        Sendbuf = Text_Create_Proc()
+                        ID_KANRI_TBL(ING_No).Step = ID_KANRI_TBL(ING_No).Step - 1
+                
+                        Hin_Shogo_Proc = False
+                        GoTo Abort_Tran
+                    Case Else
+                        Call Err_Send_Proc("システム異常発生", "", "", "", "")
+                        Sendbuf = Text_Create_Proc()
+                        Call File_Error(sts, BtOpGetEqual + BtSNoWait, "品目マスタ", 0)
+                        Hin_Shogo_Proc = SYS_ERR
+                        GoTo Abort_Tran
+                End Select
+        
+            Loop
+                                        '最終照合日付
+            Call UniCode_Conv(ITEMREC.LAST_CHK_DT, Format(Date, "yyyymmdd"))
+                                        '最終照合在庫数
+            Call UniCode_Conv(ITEMREC.LAST_CHK_QTY, Format(SUMI_QTY + MI_QTY, "00000000"))
+                                        '品目マスタ書き込み
+            Do
+                sts = BTRV(BtOpUpdate, ITEM_POS, ITEMREC, Len(ITEMREC), K0_ITEM, Len(K0_ITEM), 0)
+                Select Case sts
+                    Case BtNoErr
+                        Exit Do
+                    Case BtErrFILE_INUSE, BtErrRECORD_INUSE
+                        Call Err_Send_Proc(ID_KANRI_TBL(ING_No).YOIN_LONG_DNAME, ID_KANRI_TBL(ING_No).Hinban, "他で使用中", "", "")     '2017.09.22
+                    
+                        Sendbuf = Text_Create_Proc()
+                        ID_KANRI_TBL(ING_No).Step = ID_KANRI_TBL(ING_No).Step - 1
+                
+                        Hin_Shogo_Proc = False
+                        GoTo Abort_Tran
+            
+                    Case Else
+                        Call Err_Send_Proc("システム異常発生", "", "", "", "")
+                        Sendbuf = Text_Create_Proc()
+                        Call File_Error(sts, BtOpUpdate, "品目マスタ", 0)
+                        Hin_Shogo_Proc = SYS_ERR
+                        GoTo Abort_Tran
+                End Select
+            Loop
+        
+            If (SUMI_QTY + MI_QTY) = (ID_KANRI_TBL(ING_No).Send_SUMI_QTY + ID_KANRI_TBL(ING_No).Send_MI_QTY) Then
+                MEMO = B2_MEMO & StrConv(Format((SUMI_QTY + MI_QTY), "#0"), vbWide) & "[OK]"
+            Else
+                MEMO = B2_MEMO & StrConv(Format((ID_KANRI_TBL(ING_No).Send_SUMI_QTY + ID_KANRI_TBL(ING_No).Send_MI_QTY), "#0"), vbWide) & "[" & StrConv(Format(SUMI_QTY + MI_QTY, "#0"), vbWide) & "]"
+            End If
+            '2006.01.30
+            If ID_KANRI_TBL(ING_No).SAGYO_LOG = "1" Then
+                MENU_NO = ID_KANRI_TBL(ING_No).MENU_LV1
+            Else
+                MENU_NO = ""
+            End If
+
+            sts = IDOREKI_OUTPUT_PROC("", _
+                                        "", _
+                                        ID_KANRI_TBL(ING_No).S_JGYOBU, _
+                                        ID_KANRI_TBL(ING_No).S_NAIGAI, _
+                                        ID_KANRI_TBL(ING_No).Hinban, _
+                                        "", _
+                                        (ID_KANRI_TBL(ING_No).Sagyo_Code.CODE_TYPE & ID_KANRI_TBL(ING_No).Sagyo_Code.YOIN_CODE), _
+                                        SUMI_QTY, _
+                                        MI_QTY, _
+                                        (Format(ID_KANRI_TBL(ING_No).ID, "000")), _
+                                        ID_KANRI_TBL(ING_No).TANTO_CODE, _
+                                        FILE_RETRY, _
+                                        , _
+                                        MEMO, , , , , MENU_NO)
+'>>>>>>>>>> 2017.09.21
+            
+            
+            Select Case sts
+                Case False      '正常終了
+                Case Else
+                    Call Err_Send_Proc("システム異常発生", "", "", "", "")
+                    Sendbuf = Text_Create_Proc()
+                    Hin_Shogo_Proc = SYS_ERR
+                    GoTo Abort_Tran
+            End Select
+
+                                        'トランザクション終了
+            sts = BTRV(BtOpEndTransaction, ITEM_POS, ITEMREC, Len(ITEMREC), K0_ITEM, Len(K0_ITEM), 0)
+            If sts <> BtNoErr Then
+                Call Err_Send_Proc("システム異常発生", "", "", "", "")
+                Sendbuf = Text_Create_Proc()
+                Call File_Error(sts, BtOpEndTransaction, "", 0)
+                GoTo Abort_Tran
+            End If
+                                        '次の作業要求
+
+            Call UniCode_Conv(K0_YOIN.CODE_TYPE, ID_KANRI_TBL(ING_No).Sagyo_Code.CODE_TYPE)
+            Call UniCode_Conv(K0_YOIN.YOIN_CODE, ID_KANRI_TBL(ING_No).Sagyo_Code.YOIN_CODE)
+            sts = BTRV(BtOpGetEqual, YOIN_POS, YOINREC, Len(YOINREC), K0_YOIN, Len(K0_YOIN), 0)
+            Select Case sts
+                Case BtNoErr
+                '   -------------------------------- エラーメッセージ作成
+                Case Else
+                '重要な要因なので未登録はシステム停止とする
+                Call Err_Send_Proc("システム異常発生", "", "", "", "")
+                Sendbuf = Text_Create_Proc()
+                Call File_Error(sts, BtOpGetEqual, "要因マスタ", 0)
+                Exit Function
+            End Select
+            
+            ID_KANRI_TBL(ING_No).Step = Step_Sagyo1_REQ
+            If Sagyo_Send_Proc() Then
+                Sendbuf = Text_Create_Proc()
+                Exit Function
+            End If
+            
+            Sendbuf = Text_Create_Proc()
+    
+    End Select
+
+    Hin_Shogo_Proc = False
+    
+    Exit Function
+
+Abort_Tran:
+    
+    sts = BTRV(BtOpAbortTransaction, ITEM_POS, ITEMREC, Len(ITEMREC), K0_ITEM, Len(K0_ITEM), 0)
+    If sts <> BtNoErr Then
+        Call Err_Send_Proc("システム異常発生", "", "", "", "")
+        Sendbuf = Text_Create_Proc()
+        Call File_Error(sts, BtOpAbortTransaction, "", 0)
+    End If
+
+End Function
